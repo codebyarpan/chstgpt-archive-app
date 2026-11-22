@@ -1,0 +1,129 @@
+{
+  "name": "chatgpt-archive-app",
+  "version": "1.1.0",
+  "description": "Save, search and organise your ChatGPT conversations on your Mac",
+  "main": "./out/main/main.js",
+  "homepage": ".",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "npm run typecheck && npm run build && npm run prepare-bundle && npm run guide && electron-builder --mac --arm64",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "prepare-bundle": "node scripts/prepare-bundle.mjs",
+    "icons": "uv run --with pillow python3 scripts/make_icons.py",
+    "guide": "env -u ELECTRON_RUN_AS_NODE electron scripts/make-guide.cjs"
+  },
+  "keywords": [],
+  "author": "gate6",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-vite": "^2.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-progress": "^1.0.3",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-toast": "^1.1.5",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "electron-log": "^5.1.2",
+    "electron-updater": "^6.1.7",
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwind-merge": "^2.2.0"
+  },
+  "build": {
+    "appId": "com.gate6.chatgpt-archive",
+    "productName": "ChatGPT Archive",
+    "copyright": "gate6",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "afterPack": "scripts/after-pack.cjs",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "identity": null,
+      "minimumSystemVersion": "12.0",
+      "extendInfo": {
+        "LSUIElement": false
+      }
+    },
+    "dmg": {
+      "title": "ChatGPT Archive",
+      "artifactName": "ChatGPT-Archive-${version}-mac-arm64.${ext}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 170,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 170,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 270,
+          "y": 330,
+          "type": "file",
+          "path": "build/How to install ChatGPT Archive.pdf"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 460
+      }
+    },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      },
+      {
+        "from": "vendor/kb",
+        "to": "kb"
+      },
+      {
+        "from": "vendor/bin",
+        "to": "bin"
+      },
+      {
+        "from": "extension",
+        "to": "extension",
+        "filter": [
+          "**/*",
+          "!README.md",
+          "!**/.DS_Store",
+          "!pairing.json"
+        ]
+      }
+    ]
+  }
+}
