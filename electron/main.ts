@@ -84,6 +84,7 @@ let errorMessage = ''
 let startedAt = Date.now()
 let apiUp = false
 let mcpUp = false
+let apiMisses = 0
 
 // ── Token (created here, before either server starts, so both use the same one) ──
 function ensureToken(): string {
@@ -216,16 +217,19 @@ async function pollHealth() {
   apiUp = api
   mcpUp = mcp
   if (api) {
+    apiMisses = 0
     servers[0].restarts = 0
     if (phase !== 'ready') { phase = 'ready'; errorMessage = ''; log.info('ready'); pushStatus() }
   } else if (phase === 'ready') {
-    phase = 'starting'; phaseDetail = 'Reconnecting…'; pushStatus()
+    // One slow answer (e.g. while it is busy indexing) is not an outage: only
+    // swap the whole window for the "Reconnecting…" screen after two misses in a row.
+    if (++apiMisses >= 2) { phase = 'starting'; phaseDetail = 'Reconnecting…'; pushStatus() }
   } else if (phase === 'starting' && Date.now() - startedAt > 20 * 60 * 1000) {
     setError('Setup is taking much longer than expected. Please check the internet connection, then click "Try again".')
   }
   if (mcp) servers[1].restarts = 0
   if (changed) pushStatus()
-  pollTimer = setTimeout(pollHealth, phase === 'ready' ? 10000 : 1500)
+  pollTimer = setTimeout(pollHealth, phase === 'ready' && apiMisses === 0 ? 10000 : 1500)
 }
 
 function statusPayload() {
