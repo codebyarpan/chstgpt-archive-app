@@ -73,6 +73,7 @@ const state = {
   listing: false,
   listError: '',
   appError: '',       // archive app not reachable / not paired
+  appErrorCode: '',   // 'STALE' = extension updated: only a page reload helps
   groups: [],
   group: '',
   busy: '',           // progress text while saving
@@ -159,13 +160,13 @@ async function refreshKnown() {
   if (!state.chats.size) return;
   const res = await sendMsg({ type: 'KNOWN', ids: [...state.chats.keys()] });
   if (res.ok) { state.known = res.known || {}; state.appError = ''; }
-  else state.appError = res.error;
+  else { state.appError = res.error; state.appErrorCode = res.code || ''; }
 }
 
 async function loadGroups() {
   const res = await sendMsg({ type: 'GET_GROUPS' });
   if (res.ok) { state.groups = res.groups || []; state.appError = ''; }
-  else state.appError = res.error;
+  else { state.appError = res.error; state.appErrorCode = res.code || ''; }
   render();
 }
 
@@ -312,7 +313,7 @@ function render() {
         <button class="link" data-act="sel-none">none</button>
       </div>
     </div>
-    ${state.appError ? `<div class="alert">${esc(state.appError)}<br><button class="btn small" data-act="retry">Try again</button></div>` : ''}
+    ${state.appError ? `<div class="alert">${esc(state.appError)}<br>${state.appErrorCode === 'STALE' ? '<button class="btn small" data-act="reload">Reload page</button>' : '<button class="btn small" data-act="retry">Try again</button>'}</div>` : ''}
     ${curChat && !state.appError ? `<div class="current"><span>This chat: ${esc(curChat.title)}${curStatus === 'saved' ? ' (saved ✓)' : ''}</span>
       <button class="btn small" data-act="save-current" ${state.busy ? 'disabled' : ''}>${curStatus === 'saved' ? 'Save again' : 'Save it'}</button></div>` : ''}
     <div class="list">
@@ -376,6 +377,7 @@ function onPanelEvent(e) {
     case 'sel-none': state.selected.clear(); render(); break;
     case 'save': save([...state.selected]); break;
     case 'save-current': save([currentChatId()]); break;
+    case 'reload': location.reload(); break;
     case 'retry': state.appError = ''; loadGroups().then(refreshKnown).then(render); break;
   }
 }
