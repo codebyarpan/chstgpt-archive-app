@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How to install ChatGPT Archive</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 16mm; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: #1e293b; font-size: 11.5pt; line-height: 1.5; margin: 0; }
+  h1 { font-size: 22pt; margin: 0 0 4px; color: #065f46; }
+  .lead { color: #475569; margin: 0 0 18px; font-size: 12pt; }
+  h2 { page-break-after: avoid; font-size: 13.5pt; margin: 20px 0 6px; color: #0f172a; display: flex; align-items: center; gap: 10px; }
+  .n { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; background: #059669; color: #fff; font-size: 12pt; align-items: center; justify-content: center; flex-shrink: 0; }
+  ol, ul { margin: 6px 0 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  b { color: #0f172a; }
+  .box { background: #f1f5f9; border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+  .warn { background: #fef3c7; }
+  .ok { background: #d1fae5; }
+  .small { font-size: 10pt; color: #475569; }
+  table { border-collapse: collapse; width: 100%; font-size: 10.5pt; margin-top: 6px; }
+  td { border-top: 1px solid #e2e8f0; padding: 6px 8px 6px 0; vertical-align: top; }
+  td:first-child { width: 38%; font-weight: 600; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+  <h1>ChatGPT Archive</h1>
+  <p class="lead">Keeps a copy of your ChatGPT conversations on your Mac, so you can search them, sort them into groups and read them any time. Everything stays on your Mac.</p>
+
+  <div class="box">
+    <b>You need:</b> a Mac with an Apple chip (M1 or newer), Google Chrome, and an internet connection the first time you open the app.
+    <div class="small" style="margin-top:4px">Not sure which chip you have? Click the Apple menu  → <b>About This Mac</b>. It should say <b>Chip: Apple M…</b></div>
+  </div>
+
+  <h2><span class="n">1</span> Install the app</h2>
+  <ol>
+    <li>Double-click the file <b>ChatGPT-Archive-….dmg</b> you received. A window opens.</li>
+    <li>Drag the <b>ChatGPT Archive</b> icon onto the <b>Applications</b> folder in that window.</li>
+    <li>Close the window. In Finder's sidebar, click the eject button ⏏ next to "ChatGPT Archive".</li>
+  </ol>
+
+  <h2><span class="n">2</span> Open it the first time (one-time step)</h2>
+  <p style="margin:4px 0">The app doesn't come from the App Store, so your Mac asks you to confirm once that you trust it.</p>
+  <ol>
+    <li>Open your <b>Applications</b> folder and double-click <b>ChatGPT Archive</b>.</li>
+    <li>A message says Apple could not verify the app. Click <b>Done</b> (do <u>not</u> click "Move to Bin").</li>
+    <li>Open <b>System Settings</b> (Apple menu  → System Settings) → <b>Privacy &amp; Security</b>.</li>
+    <li>Scroll down. Next to <i>"ChatGPT Archive" was blocked…</i>, click <b>Open Anyway</b>. Enter your Mac password if asked.</li>
+    <li>Click <b>Open Anyway</b> once more. The app opens. You never have to do this again.</li>
+  </ol>
+  <div class="box small">On older Macs (macOS 14 or earlier) you can instead right-click (or Control-click) the app → <b>Open</b> → <b>Open</b>.</div>
+
+  <h2><span class="n">3</span> Wait for the first setup</h2>
+  <p style="margin:4px 0">The first time, the app downloads a few components (about 150 MB). This usually takes one to five minutes. Keep the internet on.
+     If it shows "Something needs attention", check your Wi-Fi and click <b>Try again</b>.</p>
+
+  <h2><span class="n">4</span> Connect Google Chrome</h2>
+  <p style="margin:4px 0">The app shows four simple steps on its Home screen. Follow them in order:</p>
+  <ol>
+    <li><b>Open in Chrome</b>: opens Chrome's extensions page.</li>
+    <li>Turn on the <b>Developer mode</b> switch (top-right of that page).</li>
+    <li><b>Show the extension folder</b>, then drag the folder <b>ChatGPT Archive Extension</b> onto the Chrome page.</li>
+    <li>Open <b>chatgpt.com</b> (reload it if it was open). A round green button appears at the bottom-right.</li>
+  </ol>
+  <div class="box warn small">Please don't move or delete the folder <b>ChatGPT Archive Extension</b> in your home folder: Chrome uses it.</div>
+
+
+  <h2><span class="n">5</span> Save your chats</h2>
+  <ol>
+    <li>On <b>chatgpt.com</b>, click the round <b>green button</b> at the bottom-right.</li>
+    <li>Tick the chats you want (or click <b>not saved yet</b> to tick all new ones). You can type in the box to find a chat.</li>
+    <li>Optionally pick a <b>group</b> (like a folder), then press <b>Save</b>.</li>
+  </ol>
+  <p style="margin:6px 0">Viewing a chat? The panel shows <b>This chat · Save it</b> at the top: one click saves it.</p>
+
+  <h2><span class="n">✓</span> Everyday use</h2>
+  <ul>
+    <li><b>Search</b>: type words or a question ("what did we decide about the logo?"). It also finds chats that mean the same thing in other words. Shortcut: <b>⌘K</b>.</li>
+    <li><b>All chats</b>: browse everything; filter by title, ChatGPT project or group. Click a chat to read it.</li>
+    <li>While reading a chat: <b>Add to group</b>, <b>Copy</b> the whole chat, <b>Open in ChatGPT</b>, or delete it from the archive.</li>
+    <li><b>Groups</b>: create, rename or delete groups. Deleting a group never deletes chats.</li>
+  </ul>
+  <div class="box ok small">
+    The app keeps running in the <b>menu bar</b> (the small box icon at the top-right of your screen) after you close its window,
+    so Chrome can always save chats. It also starts by itself when you log in (you can turn that off in <b>Settings &amp; help</b>).
+    To quit completely: click the menu bar icon → <b>Quit ChatGPT Archive</b>.
+  </div>
+
+  <h2>If something isn't working</h2>
+  <table>
+    <tr><td>No green button on chatgpt.com</td><td>Reload the page. Check that step 4 was done (Settings &amp; help in the app shows the steps again).</td></tr>
+    <tr><td>"The ChatGPT Archive app is not running"</td><td>Open ChatGPT Archive from Applications, then click Try again in the panel.</td></tr>
+    <tr><td>Chrome shows a "developer mode extensions" message</td><td>Close it with the ✕. Don't click "Disable".</td></tr>
+    <tr><td>A chat changed in ChatGPT</td><td>Save it again; the newer version replaces the old one and keeps its groups.</td></tr>
+    <tr><td>Anything else</td><td>In the app: Settings &amp; help → Advanced → <b>Show log files</b>, and send those files to the person who gave you the app.</td></tr>
+  </table>
+
+  <p class="small" style="margin-top:18px">Optional: if you use the Claude app, Settings &amp; help → <b>Connect Claude</b> lets Claude search your saved ChatGPT chats when you ask it to.</p>
+</body>
+</html>
