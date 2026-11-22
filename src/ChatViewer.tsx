@@ -29,11 +29,13 @@ export default function ChatViewer({ id, at, terms, onClose }: { id: string; at?
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Jump to the message a search result pointed at.
+  // Jump to the message a search result pointed at, once (not again after a reload,
+  // e.g. when the chat is added to a group while the person is reading further down).
+  const jumped = useRef(false)
   useEffect(() => {
-    if (!conv || at === undefined) return
+    if (!conv || at === undefined || jumped.current) return
     const el = scroller.current?.querySelector(`[data-idx="${at}"]`)
-    el?.scrollIntoView({ block: 'start' })
+    if (el) { el.scrollIntoView({ block: 'start' }); jumped.current = true }
   }, [conv, at])
 
   const addTo = async (g: { id: number; name: string }) => {
