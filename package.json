@@ -11,6 +11,7 @@
     "dist": "npm run typecheck && npm run build && npm run prepare-bundle && npm run guide && electron-builder --mac --arm64",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "prepare-bundle": "node scripts/prepare-bundle.mjs",
+    "fetch-cloudflared": "zsh scripts/fetch-cloudflared.sh",
     "icons": "uv run --with pillow python3 scripts/make_icons.py",
     "guide": "env -u ELECTRON_RUN_AS_NODE electron scripts/make-guide.cjs"
   },
