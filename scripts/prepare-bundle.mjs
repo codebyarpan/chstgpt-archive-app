@@ -1,7 +1,7 @@
 // Copies what the packaged app needs from outside this folder into vendor/:
 //   vendor/kb   the Python backend (source of truth: ~/chatgpt-archive/kb)
 //   vendor/bin  the uv binary that runs it (downloads Python + libraries on first launch)
-//               and cloudflared (the secure link for "Connect ChatGPT")
+//               and cloudflared (the secure link for "Connect a web app")
 import { cpSync, rmSync, mkdirSync, existsSync, chmodSync, readdirSync, realpathSync, readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
@@ -23,7 +23,7 @@ const uv = uvCandidates.find(p => existsSync(p))
 if (!uv) throw new Error('uv not found: install it (brew install uv) or set UV_BINARY')
 cpSync(realpathSync(uv), join(vendor, 'bin', 'uv'))
 chmodSync(join(vendor, 'bin', 'uv'), 0o755)
-// cloudflared opens the public HTTPS link that ChatGPT connects through ("Connect ChatGPT").
+// cloudflared opens the public HTTPS link that web apps connect through ("Connect a web app").
 // It must run on every macOS the app supports, so check each candidate's minimum version
 // (Homebrew's build requires the macOS it was built on).
 const MIN_MACOS = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).build.mac.minimumSystemVersion
