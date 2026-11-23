@@ -493,11 +493,32 @@ function setTunnel(t: Partial<TunnelState>) {
   tunnel = { ...tunnel, ...t }
   mainWindow?.webContents.send('web-link', webLinkPayload())
 }
+const versionAtLeast = (have: string, need: string) => {
+  const a = have.split('.').map(Number), b = need.split('.').map(Number)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0)
+  return true
+}
+/**
+ * The macOS version the link needs when this Mac is older (else ''). The bundled
+ * cloudflared may need a newer macOS than the app (prepare-bundle records it in
+ * bin/cloudflared.json); ngrok, when set up, has no such limit here.
+ */
+function webLinkNeedsMacos(): string {
+  if (!app.isPackaged) return ''
+  const domain = existsSync(NGROK_DOMAIN_FILE) ? readFileSync(NGROK_DOMAIN_FILE, 'utf8').trim() : ''
+  if (domain && findBinary('ngrok')) return ''
+  let need = ''
+  try { need = JSON.parse(readFileSync(join(process.resourcesPath, 'bin', 'cloudflared.json'), 'utf8')).minMacos || '' } catch { /* older bundle */ }
+  return need && !versionAtLeast(process.getSystemVersion(), need) ? need : ''
+}
+
 function webLinkPayload() {
   const token = readToken()
   const on = tunnel.status === 'on' && !!token
   return {
     ...tunnel,
+    needsMacos: webLinkNeedsMacos(),
+    macos: process.getSystemVersion(),
     // For apps that cannot send headers (ChatGPT, claude.ai): the token is in the path.
     connectorUrl: on ? `${tunnel.url}/t/${token}/mcp` : '',
     // For apps that can send `Authorization: Bearer <token>`.
@@ -507,6 +528,11 @@ function webLinkPayload() {
 
 function startTunnel() {
   if (tunnelProc) return
+  const need = webLinkNeedsMacos()
+  if (need) {
+    setTunnel({ status: 'error', error: `Connecting a web app needs macOS ${need} or newer, and this Mac has macOS ${process.getSystemVersion()}. Update it in System Settings → General → Software Update, then try again.` })
+    return
+  }
   const domain = existsSync(NGROK_DOMAIN_FILE) ? readFileSync(NGROK_DOMAIN_FILE, 'utf8').trim() : ''
   const ngrok = domain ? findBinary('ngrok') : null
   const cloudflared = findBinary('cloudflared')

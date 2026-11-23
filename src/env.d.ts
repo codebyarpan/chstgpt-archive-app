@@ -25,6 +25,10 @@ interface WebLinkState {
   connectorUrl: string
   /** link without the token, for apps that send `Authorization: Bearer <token>` */
   plainUrl: string
+  /** e.g. "15.0" when this Mac's macOS is too old for the link, else "" */
+  needsMacos: string
+  /** this Mac's macOS version */
+  macos: string
 }
 
 type AiProviderId = 'groq' | 'xai'

@@ -59,7 +59,17 @@ export default function ConnectWebApp() {
           Lets AI apps that run in a web browser, such as ChatGPT and Claude on the web, search and read your saved chats.
           This app opens a private, secure link to your archive that only you know. It works while this app is running.
         </p>
-        <Button onClick={() => window.api!.webLinkConnect().then(setS)}><Globe size={15} /> Connect a web app</Button>
+        {s.needsMacos ? (
+          <p className="text-sm text-amber-300 flex items-start gap-2">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <span>
+              This needs macOS {s.needsMacos} or newer, and this Mac has macOS {s.macos}. Update it in{' '}
+              <b>System Settings → General → Software Update</b>, then come back here. Everything else in the app works without it.
+            </span>
+          </p>
+        ) : (
+          <Button onClick={() => window.api!.webLinkConnect().then(setS)}><Globe size={15} /> Connect a web app</Button>
+        )}
       </div>
     )
   }
