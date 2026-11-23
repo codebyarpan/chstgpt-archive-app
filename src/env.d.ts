@@ -15,14 +15,16 @@ interface AdvancedInfo {
   token: string; dataFolder: string; db: string; claudeCode: string; mcpConfig: string; version: string
 }
 
-interface ChatgptState {
+interface WebLinkState {
   status: 'off' | 'starting' | 'on' | 'error'
   url: string
   /** true when the link stays the same after a restart (ngrok static domain) */
   stable: boolean
   error: string
-  /** the link to paste into ChatGPT (only while status is 'on') */
+  /** link with the token inside, for ChatGPT / claude.ai connectors (only while status is 'on') */
   connectorUrl: string
+  /** link without the token, for apps that send `Authorization: Bearer <token>` */
+  plainUrl: string
 }
 
 type AiProviderId = 'groq' | 'xai'
@@ -62,10 +64,10 @@ interface Window {
     openDataFolder(): Promise<string>
     openLogs(): Promise<string>
     rebuildIndex(): void
-    chatgptState(): Promise<ChatgptState>
-    chatgptConnect(): Promise<ChatgptState>
-    chatgptDisconnect(): Promise<ChatgptState>
-    onChatgpt(cb: (s: ChatgptState) => void): () => void
+    webLinkState(): Promise<WebLinkState>
+    webLinkConnect(): Promise<WebLinkState>
+    webLinkDisconnect(): Promise<WebLinkState>
+    onWebLink(cb: (s: WebLinkState) => void): () => void
     aiGet(): Promise<AiConfig>
     aiTest(provider: AiProviderId, key?: string): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>
     aiSave(c: { provider: AiProviderId; key?: string; model: string }): Promise<{ ok: true; config: AiConfig } | { ok: false; error: string }>

@@ -1,9 +1,9 @@
 import { useState, useEffect, ReactNode, useRef } from 'react'
-import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Link2, Sparkles } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Globe, Sparkles } from 'lucide-react'
 import { api, Stats } from '../api'
 import { Button, Card, PageTitle, useApp } from '../ui'
 import ConnectChrome from '../ConnectChrome'
-import ConnectChatGPT from '../ConnectChatGPT'
+import ConnectWebApp from '../ConnectWebApp'
 import AiSettings from '../AiSettings'
 
 function Section({ icon: Icon, title, children }: { icon: any; title: string; children: ReactNode }) {
@@ -143,8 +143,8 @@ export default function Settings() {
         )}
       </Section>
 
-      <Section icon={Link2} title="Use your archive in ChatGPT (optional)">
-        <ConnectChatGPT />
+      <Section icon={Globe} title="Connect a web app: ChatGPT, Claude on the web… (optional)">
+        <ConnectWebApp />
       </Section>
 
       <Section icon={HelpCircle} title="Questions">

@@ -4,7 +4,7 @@ Mac app (Electron + React) plus the Chrome extension that saves chats into it. T
 lives in `~/chatgpt-archive/kb` and is copied into the app at build time.
 
 ```
-electron/      main process: starts the backend, menu bar icon, setup helpers (Chrome, Claude, ChatGPT
+electron/      main process: starts the backend, menu bar icon, setup helpers (Chrome, Claude, web-app
                tunnel, login item); ai.ts = the Ask AI chatbot (Groq / xAI Grok)
 src/           the window (React): Home, All chats, Search, Ask AI, Groups, Settings & help, chat viewer
 extension/     Chrome extension (green button on chatgpt.com)
@@ -38,10 +38,11 @@ ad hoc: on another Mac the first open needs System Settings → Privacy & Securi
 - "Connect Chrome" copies the extension to `~/ChatGPT Archive Extension` with `pairing.json`
   (the token), so the user never pastes a token.
 - "Connect Claude" merges an entry into Claude Desktop's config (backup: `*.before-chatgpt-archive`).
-- "Connect ChatGPT" opens a public HTTPS tunnel to the MCP server (ngrok if `.ngrok-domain` exists in
-  the data folder and `ngrok` is installed, so the address is fixed; otherwise a Cloudflare quick
-  tunnel whose address changes on each start) and shows `<tunnel>/t/<token>/mcp` to paste into
-  ChatGPT as a connector with "No authentication". Reopened at launch while turned on.
+- "Connect a web app" opens a public HTTPS tunnel to the MCP server (ngrok if `.ngrok-domain` exists
+  in the data folder and `ngrok` is installed, so the address is fixed; otherwise a Cloudflare quick
+  tunnel whose address changes on each start). Tabs give steps for ChatGPT, Claude on the web and
+  other apps: `<tunnel>/t/<token>/mcp` for connectors without auth headers, or `<tunnel>/mcp` plus
+  `Authorization: Bearer <token>`. Reopened at launch while turned on.
 - "Ask AI" answers questions from the archive: hybrid search picks passages, Groq or xAI Grok writes
   the answer with [n] citations. Key in `<userData>/ai.json` (mode 0600), never sent to the window.
 

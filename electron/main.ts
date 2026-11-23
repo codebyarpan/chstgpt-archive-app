@@ -64,7 +64,7 @@ const CHILD_ENV = {
 
 // ── Small persisted preferences ─────────────────────────────────────────────
 const PREFS_FILE = join(app.getPath('userData'), 'prefs.json')
-interface Prefs { initialized?: boolean; closeNoticeShown?: boolean; chatgptTunnel?: boolean }
+interface Prefs { initialized?: boolean; closeNoticeShown?: boolean; webLink?: boolean }
 function readPrefs(): Prefs {
   try { return JSON.parse(readFileSync(PREFS_FILE, 'utf8')) } catch { return {} }
 }
@@ -466,9 +466,10 @@ function connectClaudeDesktop(): { ok: boolean; error?: string } {
   }
 }
 
-// ── ChatGPT (a public HTTPS tunnel to the local MCP server) ─────────────────
-// ChatGPT connectors only reach public https addresses and cannot send an
-// Authorization header, so the token travels in the path: <tunnel>/t/<token>/mcp.
+// ── Web apps (a public HTTPS tunnel to the local MCP server) ─────────────────
+// Web apps such as ChatGPT and claude.ai only reach public https addresses and
+// their connectors cannot send an Authorization header, so the token travels in
+// the path: <tunnel>/t/<token>/mcp.
 // With ngrok set up (start-jarvis.sh --setup) the address never changes;
 // otherwise a Cloudflare quick tunnel (no account) gets a new one on each start.
 interface TunnelState { status: 'off' | 'starting' | 'on' | 'error'; url: string; stable: boolean; error: string }
@@ -490,11 +491,18 @@ function findBinary(name: string): string | null {
 
 function setTunnel(t: Partial<TunnelState>) {
   tunnel = { ...tunnel, ...t }
-  mainWindow?.webContents.send('chatgpt', chatgptPayload())
+  mainWindow?.webContents.send('web-link', webLinkPayload())
 }
-function chatgptPayload() {
+function webLinkPayload() {
   const token = readToken()
-  return { ...tunnel, connectorUrl: tunnel.status === 'on' && token ? `${tunnel.url}/t/${token}/mcp` : '' }
+  const on = tunnel.status === 'on' && !!token
+  return {
+    ...tunnel,
+    // For apps that cannot send headers (ChatGPT, claude.ai): the token is in the path.
+    connectorUrl: on ? `${tunnel.url}/t/${token}/mcp` : '',
+    // For apps that can send `Authorization: Bearer <token>`.
+    plainUrl: on ? `${tunnel.url}/mcp` : ''
+  }
 }
 
 function startTunnel() {
@@ -548,7 +556,7 @@ function startTunnel() {
     tunnelProc = null
     log.warn('[tunnel] exited', code, lastLine)
     if (isQuitting || tunnel.status === 'off') return
-    setTunnel({ status: 'error', url: '', error: 'The secure link to ChatGPT stopped (for example after the internet dropped). Click "Try again".' })
+    setTunnel({ status: 'error', url: '', error: 'The secure link stopped (for example after the internet dropped). Click "Try again".' })
   })
 }
 
@@ -624,17 +632,17 @@ ipcMain.handle('get-advanced', () => {
 ipcMain.handle('open-data-folder', () => shell.openPath(ARCHIVE_DIR))
 ipcMain.handle('open-logs', () => shell.openPath(app.getPath('logs')))
 ipcMain.on('rebuild-index', rebuildIndex)
-ipcMain.handle('chatgpt-state', () => chatgptPayload())
-ipcMain.handle('chatgpt-connect', () => {
-  writePrefs({ ...readPrefs(), chatgptTunnel: true })
+ipcMain.handle('web-link-state', () => webLinkPayload())
+ipcMain.handle('web-link-connect', () => {
+  writePrefs({ ...readPrefs(), webLink: true })
   if (tunnel.status === 'error') stopTunnel()
   startTunnel()
-  return chatgptPayload()
+  return webLinkPayload()
 })
-ipcMain.handle('chatgpt-disconnect', () => {
-  writePrefs({ ...readPrefs(), chatgptTunnel: false })
+ipcMain.handle('web-link-disconnect', () => {
+  writePrefs({ ...readPrefs(), webLink: false })
   stopTunnel()
-  return chatgptPayload()
+  return webLinkPayload()
 })
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -669,7 +677,7 @@ if (!app.requestSingleInstanceLock()) {
     createTray()
     refreshExtensionIfOutdated()
     // The tunnel starts after leftovers from an earlier run were cleaned up.
-    startServers(true).then(() => { if (readPrefs().chatgptTunnel) startTunnel() })
+    startServers(true).then(() => { if (readPrefs().webLink) startTunnel() })
     if (!process.argv.includes('--hidden')) showWindow()
     else app.dock?.hide()
   })
