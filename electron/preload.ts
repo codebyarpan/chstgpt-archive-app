@@ -29,6 +29,13 @@ contextBridge.exposeInMainWorld('api', {
   chatgptConnect: () => ipcRenderer.invoke('chatgpt-connect'),
   chatgptDisconnect: () => ipcRenderer.invoke('chatgpt-disconnect'),
   onChatgpt: (cb: (s: unknown) => void) => subscribe('chatgpt', cb),
+  aiGet: () => ipcRenderer.invoke('ai-get'),
+  aiTest: (provider: string, key?: string) => ipcRenderer.invoke('ai-test', provider, key),
+  aiSave: (c: unknown) => ipcRenderer.invoke('ai-save', c),
+  aiClear: () => ipcRenderer.invoke('ai-clear'),
+  askStart: (id: string, history: unknown) => ipcRenderer.send('ask-start', id, history),
+  askCancel: (id: string) => ipcRenderer.send('ask-cancel', id),
+  onAskEvent: (cb: (ev: unknown) => void) => subscribe('ask-event', cb),
   onRebuildProgress: (cb: (line: string) => void) => subscribe('rebuild-progress', cb),
   onRebuildDone: (cb: (code: number | null) => void) => subscribe('rebuild-done', cb)
 })

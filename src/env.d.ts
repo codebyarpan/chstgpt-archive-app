@@ -25,6 +25,23 @@ interface ChatgptState {
   connectorUrl: string
 }
 
+type AiProviderId = 'groq' | 'xai'
+interface AiConfig {
+  provider: AiProviderId | null
+  model: string
+  hasKey: boolean
+  /** last characters of the saved key, e.g. "…a1b2" (the key itself never reaches the window) */
+  keyHint: string
+  providers: { id: AiProviderId; name: string; keyUrl: string; note: string }[]
+}
+interface AskSource { n: number; conversation_id: string; title: string; updated: string; project: string; message_idx: number }
+type AskEvent = { id: string } & (
+  | { type: 'sources'; sources: AskSource[] }
+  | { type: 'delta'; text: string }
+  | { type: 'done' }
+  | { type: 'error'; error: string }
+)
+
 interface Window {
   api?: {
     request<T = any>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<ApiResult<T>>
@@ -49,6 +66,13 @@ interface Window {
     chatgptConnect(): Promise<ChatgptState>
     chatgptDisconnect(): Promise<ChatgptState>
     onChatgpt(cb: (s: ChatgptState) => void): () => void
+    aiGet(): Promise<AiConfig>
+    aiTest(provider: AiProviderId, key?: string): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>
+    aiSave(c: { provider: AiProviderId; key?: string; model: string }): Promise<{ ok: true; config: AiConfig } | { ok: false; error: string }>
+    aiClear(): Promise<AiConfig>
+    askStart(id: string, history: { role: 'user' | 'assistant'; content: string }[]): void
+    askCancel(id: string): void
+    onAskEvent(cb: (ev: AskEvent) => void): () => void
     onRebuildProgress(cb: (line: string) => void): () => void
     onRebuildDone(cb: (code: number | null) => void): () => void
   }

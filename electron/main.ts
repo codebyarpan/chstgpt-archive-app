@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, cpSync, 
 import { homedir } from 'os'
 import { randomBytes } from 'crypto'
 import log from 'electron-log'
+import { registerAi } from './ai'
 
 // A separate profile (own single-instance lock and prefs) for side-by-side testing.
 if (process.env.CHATGPT_ARCHIVE_PROFILE) app.setPath('userData', process.env.CHATGPT_ARCHIVE_PROFILE)
@@ -563,8 +564,8 @@ function stopTunnel() {
  * The renderer talks to the Ingest API through here: the main process adds the
  * Bearer token and is not subject to the browser's CORS rules.
  */
-ipcMain.handle('api', async (_e, method: string, path: string, body?: unknown) => {
-  if (!['GET', 'POST', 'DELETE'].includes(method) || !path.startsWith('/')) {
+async function apiRequest(method: string, path: string, body?: unknown) {
+  if (!['GET', 'POST', 'DELETE'].includes(method) || typeof path !== 'string' || !path.startsWith('/')) {
     return { ok: false, status: 0, error: 'bad request' }
   }
   try {
@@ -584,7 +585,9 @@ ipcMain.handle('api', async (_e, method: string, path: string, body?: unknown) =
   } catch {
     return { ok: false, status: 0, error: phase === 'starting' ? 'The archive is still starting up…' : 'The archive is not running.' }
   }
-})
+}
+ipcMain.handle('api', (_e, method: string, path: string, body?: unknown) => apiRequest(method, path, body))
+registerAi(apiRequest)
 
 ipcMain.handle('get-status', () => statusPayload())
 ipcMain.handle('retry-start', () => retryStart())
