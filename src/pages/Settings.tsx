@@ -1,9 +1,10 @@
 import { useState, useEffect, ReactNode, useRef } from 'react'
-import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Link2 } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Link2, Sparkles } from 'lucide-react'
 import { api, Stats } from '../api'
 import { Button, Card, PageTitle, useApp } from '../ui'
 import ConnectChrome from '../ConnectChrome'
 import ConnectChatGPT from '../ConnectChatGPT'
+import AiSettings from '../AiSettings'
 
 function Section({ icon: Icon, title, children }: { icon: any; title: string; children: ReactNode }) {
   return (
@@ -74,6 +75,14 @@ export default function Settings() {
     return () => { clearInterval(t); off1(); off2() }
   }, [toast, changed])
 
+  // Arriving from "Go to Settings" elsewhere: scroll to the section asked for.
+  useEffect(() => {
+    const anchor = sessionStorage.getItem('settingsAnchor')
+    if (!anchor) return
+    sessionStorage.removeItem('settingsAnchor')
+    setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }, [])
+
   const connectClaude = async () => {
     const r = await window.api!.claudeDesktopConnect()
     if (r.ok) { setClaude('connected'); toast('Done. Quit and reopen Claude to use it.') }
@@ -93,6 +102,12 @@ export default function Settings() {
           </p>
         )}
       </Section>
+
+      <div id="ai" className="scroll-mt-10">
+        <Section icon={Sparkles} title="AI chatbot (optional)">
+          <AiSettings />
+        </Section>
+      </div>
 
       <Section icon={Power} title="Keep it running">
         <label className={`flex items-start gap-3 ${login?.available ? 'cursor-pointer' : 'opacity-60'}`}>
