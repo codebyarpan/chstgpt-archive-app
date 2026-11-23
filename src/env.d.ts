@@ -9,10 +9,14 @@ interface AppStatus {
   mcp: boolean
   rebuilding: boolean
   slow: boolean
+  /** the server's address when the chats are stored there, else '' */
+  server: string
 }
 
 interface AdvancedInfo {
   token: string; dataFolder: string; db: string; claudeCode: string; mcpConfig: string; version: string
+  /** the server's address in server mode, else '' */
+  server: string
 }
 
 interface WebLinkState {
@@ -29,6 +33,8 @@ interface WebLinkState {
   needsMacos: string
   /** this Mac's macOS version */
   macos: string
+  /** true in server mode: the link is the server itself (always on, no tunnel) */
+  server: boolean
 }
 
 type AiProviderId = 'groq' | 'xai'
@@ -48,6 +54,22 @@ type AskEvent = { id: string } & (
   | { type: 'error'; error: string }
 )
 
+interface StorageInfo {
+  mode: 'local' | 'server'
+  server: string
+  /** whether this Mac still holds a copy of the database */
+  hasLocalCopy: boolean
+  /** size of the local database + saved exports, in MB */
+  dataMB: number
+  /** size of the smart-search model on this Mac, in MB */
+  modelMB: number
+}
+type ServerCheck = { ok: true; url: string; chats: number } | { ok: false; error: string }
+type MoveEvent =
+  | { type: 'progress'; done: number; total: number }
+  | { type: 'done'; result: { chats: number; imported: number; already_there: number; groups: number; verified: number }; extensionInstalled: boolean }
+  | { type: 'error'; error: string }
+
 interface Window {
   api?: {
     request<T = any>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<ApiResult<T>>
@@ -60,7 +82,7 @@ interface Window {
     extensionPrepare(): Promise<string>
     extensionReveal(): Promise<void>
     openChromeExtensions(): Promise<boolean>
-    claudeDesktopState(): Promise<'not-installed' | 'connected' | 'not-connected'>
+    claudeDesktopState(): Promise<'not-installed' | 'connected' | 'not-connected' | 'server'>
     claudeDesktopConnect(): Promise<{ ok: boolean; error?: string }>
     getLoginItem(): Promise<{ enabled: boolean; available: boolean }>
     setLoginItem(on: boolean): Promise<boolean>
@@ -72,6 +94,13 @@ interface Window {
     webLinkConnect(): Promise<WebLinkState>
     webLinkDisconnect(): Promise<WebLinkState>
     onWebLink(cb: (s: WebLinkState) => void): () => void
+    storageInfo(): Promise<StorageInfo>
+    serverTest(url: string, token: string): Promise<ServerCheck>
+    serverMove(url: string, token: string): Promise<{ ok: true } | { ok: false; error: string }>
+    serverConnect(url: string, token: string): Promise<{ ok: true; chats: number; extensionInstalled: boolean } | { ok: false; error: string }>
+    serverDisconnect(): Promise<{ ok: true; extensionInstalled: boolean } & Omit<StorageInfo, 'mode' | 'server'>>
+    freeLocalSpace(): Promise<{ ok: true; freedMB: number } | { ok: false; error: string }>
+    onMoveEvent(cb: (ev: MoveEvent) => void): () => void
     aiGet(): Promise<AiConfig>
     aiTest(provider: AiProviderId, key?: string): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>
     aiSave(c: { provider: AiProviderId; key?: string; model: string }): Promise<{ ok: true; config: AiConfig } | { ok: false; error: string }>

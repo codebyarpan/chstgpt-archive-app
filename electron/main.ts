@@ -31,7 +31,7 @@ const MCP_SERVER = join(KB_DIR, 'server.py')
 const INGEST_SCRIPT = join(KB_DIR, 'ingest.py')
 const EXTENSION_SRC = app.isPackaged ? join(process.resourcesPath, 'extension') : join(app.getAppPath(), 'extension')
 // Visible folder (not inside ~/Library) so it is easy to pick in Chrome's "Load unpacked".
-const EXTENSION_DIR = join(HOME, 'ChatGPT Archive Extension')
+const EXTENSION_DIR = process.env.CHATGPT_ARCHIVE_EXTENSION_DIR || join(HOME, 'ChatGPT Archive Extension')
 
 // 127.0.0.1, not "localhost": Node may resolve localhost to ::1 while the server listens on IPv4.
 const API_PORT = Number(process.env.CHATGPT_ARCHIVE_API_PORT) || 47821
@@ -70,6 +70,36 @@ function readPrefs(): Prefs {
 }
 function writePrefs(p: Prefs) {
   try { mkdirSync(app.getPath('userData'), { recursive: true }); writeFileSync(PREFS_FILE, JSON.stringify(p, null, 2)) } catch (e) { log.warn('prefs', e) }
+}
+
+// ── Storage: on this Mac (local servers) or on the user's own server ────────
+// In server mode nothing runs locally: the window, the Chrome extension and the
+// connect links all use https://<server> (the deploy/ setup: API at /, MCP at /mcp).
+const SERVER_FILE = join(app.getPath('userData'), 'server.json')
+interface Remote { url: string; token: string }
+function readRemote(): Remote | null {
+  try {
+    const r = JSON.parse(readFileSync(SERVER_FILE, 'utf8'))
+    return typeof r.url === 'string' && r.url && typeof r.token === 'string' && r.token ? { url: r.url, token: r.token } : null
+  } catch { return null }
+}
+function writeRemote(r: Remote | null) {
+  if (!r) { if (existsSync(SERVER_FILE)) unlinkSync(SERVER_FILE); return }
+  mkdirSync(app.getPath('userData'), { recursive: true })
+  writeFileSync(SERVER_FILE, JSON.stringify(r, null, 2), { mode: 0o600 })
+  chmodSync(SERVER_FILE, 0o600)
+}
+let remote: Remote | null = readRemote()
+const apiBase = () => remote?.url ?? API_URL
+const apiToken = () => remote?.token ?? readToken()
+
+/** "https://host" from what the person typed; plain http only for this Mac (testing). */
+function normalizeServerUrl(input: string): string | null {
+  let u: URL
+  try { u = new URL(/^[a-z]+:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`) } catch { return null }
+  const local = ['127.0.0.1', 'localhost'].includes(u.hostname)
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) return null
+  return u.origin
 }
 
 // ── Globals ─────────────────────────────────────────────────────────────────
@@ -180,6 +210,15 @@ async function startServers(appStart = false) {
   errorMessage = ''
   startedAt = Date.now()
   pushStatus()
+  if (remote) {
+    // Server mode: nothing to start here, just wait for the server to answer.
+    if (appStart) await killStrays(true)
+    phaseDetail = 'Connecting to your server…'
+    pushStatus()
+    if (pollTimer) clearTimeout(pollTimer)
+    pollHealth()
+    return
+  }
   if (!existsSync(INGEST_API) || !existsSync(MCP_SERVER)) {
     setError(`Some of the app's files are missing (${KB_DIR}). Please reinstall the app.`)
     return
@@ -216,7 +255,8 @@ async function isUp(url: string): Promise<boolean> {
 }
 
 async function pollHealth() {
-  const [api, mcp] = await Promise.all([isUp(API_URL), isUp(MCP_URL)])
+  // Server mode: the MCP server is the server's business (behind the same address).
+  const [api, mcp] = await Promise.all([isUp(apiBase()), remote ? Promise.resolve(true) : isUp(MCP_URL)])
   const changed = api !== apiUp || mcp !== mcpUp
   apiUp = api
   mcpUp = mcp
@@ -228,6 +268,8 @@ async function pollHealth() {
     // One slow answer (e.g. while it is busy indexing) is not an outage: only
     // swap the whole window for the "Reconnecting…" screen after two misses in a row.
     if (++apiMisses >= 2) { phase = 'starting'; phaseDetail = 'Reconnecting…'; pushStatus() }
+  } else if (phase === 'starting' && remote && Date.now() - startedAt > 20 * 1000) {
+    setError(`Can't reach your archive server at ${remote.url}. Check the internet connection and that the server is running, then click "Try again".`)
   } else if (phase === 'starting' && Date.now() - startedAt > 20 * 60 * 1000) {
     setError('Setup is taking much longer than expected. Please check the internet connection, then click "Try again".')
   }
@@ -239,7 +281,8 @@ async function pollHealth() {
 function statusPayload() {
   return {
     phase, detail: phaseDetail, error: errorMessage, api: apiUp, mcp: mcpUp,
-    rebuilding: !!rebuildProc, slow: phase === 'starting' && Date.now() - startedAt > 8000
+    rebuilding: !!rebuildProc, slow: !remote && phase === 'starting' && Date.now() - startedAt > 8000,
+    server: remote?.url || ''
   }
 }
 function pushStatus() {
@@ -401,12 +444,24 @@ function extensionVersion(dir: string): string {
   try { return JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')).version || '' } catch { return '' }
 }
 
-/** Copy the extension to ~/ChatGPT Archive Extension with this Mac's token pre-filled. */
+/**
+ * Copy the extension to ~/ChatGPT Archive Extension, paired with where the chats
+ * live: this Mac's API and token, or the server's. In server mode the server's
+ * origin is added to the manifest's host_permissions, so Chrome lets the
+ * extension reach it without asking (Chrome reads the manifest when the
+ * extension is loaded or reloaded).
+ */
 function installExtensionFiles(): string {
-  const token = ensureToken()
+  const token = remote ? remote.token : ensureToken()
   if (existsSync(EXTENSION_DIR)) rmSync(EXTENSION_DIR, { recursive: true, force: true })
   cpSync(EXTENSION_SRC, EXTENSION_DIR, { recursive: true, filter: (src) => !/(\.DS_Store|README\.md)$/.test(src) })
-  writeFileSync(join(EXTENSION_DIR, 'pairing.json'), JSON.stringify({ token, server: API_URL }, null, 2))
+  writeFileSync(join(EXTENSION_DIR, 'pairing.json'), JSON.stringify({ token, server: apiBase() }, null, 2))
+  if (remote) {
+    const mf = join(EXTENSION_DIR, 'manifest.json')
+    const m = JSON.parse(readFileSync(mf, 'utf8'))
+    m.host_permissions = [...new Set([...(m.host_permissions || []), `${remote.url}/*`])]
+    writeFileSync(mf, JSON.stringify(m, null, 2))
+  }
   writeFileSync(join(EXTENSION_DIR, 'READ ME.txt'),
     'This folder is the ChatGPT Archive extension for Google Chrome.\n' +
     'Please do not move or delete it: Chrome loads the extension from here.\n' +
@@ -436,7 +491,20 @@ const CLAUDE_CONFIG = join(HOME, 'Library', 'Application Support', 'Claude', 'cl
 function mcpEntry() {
   return { command: UV, args: ['run', '--quiet', '--script', MCP_SERVER], env: { CHATGPT_ARCHIVE_HOME: ARCHIVE_DIR, ...PY_ENV } }
 }
-function claudeDesktopState(): 'not-installed' | 'connected' | 'not-connected' {
+/** Remove our local entry from Claude Desktop (it reads this Mac's copy, which server mode no longer uses). */
+function removeClaudeDesktopEntry() {
+  try {
+    if (!existsSync(CLAUDE_CONFIG)) return
+    const cfg = JSON.parse(readFileSync(CLAUDE_CONFIG, 'utf8'))
+    if (!cfg?.mcpServers?.['chatgpt-archive']) return
+    copyFileSync(CLAUDE_CONFIG, CLAUDE_CONFIG + '.before-chatgpt-archive')
+    delete cfg.mcpServers['chatgpt-archive']
+    writeFileSync(CLAUDE_CONFIG, JSON.stringify(cfg, null, 2))
+    log.info('removed the local Claude Desktop entry (server mode)')
+  } catch (e) { log.warn('claude entry', e) }
+}
+function claudeDesktopState(): 'not-installed' | 'connected' | 'not-connected' | 'server' {
+  if (remote) return 'server'
   if (!existsSync('/Applications/Claude.app') && !existsSync(join(HOME, 'Applications', 'Claude.app')) && !existsSync(CLAUDE_CONFIG)) return 'not-installed'
   try {
     const cfg = JSON.parse(readFileSync(CLAUDE_CONFIG, 'utf8'))
@@ -513,9 +581,18 @@ function webLinkNeedsMacos(): string {
 }
 
 function webLinkPayload() {
+  if (remote) {
+    // Server mode: the server is already on the internet; no tunnel needed.
+    return {
+      status: 'on' as const, url: remote.url, stable: true, error: '', server: true, needsMacos: '',
+      macos: process.getSystemVersion(),
+      connectorUrl: `${remote.url}/t/${remote.token}/mcp`, plainUrl: `${remote.url}/mcp`
+    }
+  }
   const token = readToken()
   const on = tunnel.status === 'on' && !!token
   return {
+    server: false,
     ...tunnel,
     needsMacos: webLinkNeedsMacos(),
     macos: process.getSystemVersion(),
@@ -603,10 +680,10 @@ async function apiRequest(method: string, path: string, body?: unknown) {
     return { ok: false, status: 0, error: 'bad request' }
   }
   try {
-    const r = await fetch(API_URL + path, {
+    const r = await fetch(apiBase() + path, {
       method,
       headers: {
-        Authorization: `Bearer ${readToken()}`,
+        Authorization: `Bearer ${apiToken()}`,
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -617,7 +694,11 @@ async function apiRequest(method: string, path: string, body?: unknown) {
       ? { ok: true, status: r.status, data }
       : { ok: false, status: r.status, error: (data && (data.detail || data.error)) || r.statusText }
   } catch {
-    return { ok: false, status: 0, error: phase === 'starting' ? 'The archive is still starting up…' : 'The archive is not running.' }
+    return {
+      ok: false, status: 0,
+      error: remote ? `Can't reach your archive server (${remote.url}).`
+        : phase === 'starting' ? 'The archive is still starting up…' : 'The archive is not running.'
+    }
   }
 }
 ipcMain.handle('api', (_e, method: string, path: string, body?: unknown) => apiRequest(method, path, body))
@@ -647,28 +728,170 @@ ipcMain.handle('claude-desktop-connect', () => connectClaudeDesktop())
 ipcMain.handle('get-login-item', () => ({ enabled: loginItemEnabled(), available: app.isPackaged }))
 ipcMain.handle('set-login-item', (_e, on: boolean) => { setLoginItem(!!on); return loginItemEnabled() })
 ipcMain.handle('get-advanced', () => {
-  const token = readToken()
+  const token = apiToken()
+  const mcpUrl = remote ? `${remote.url}/mcp` : `${MCP_URL}/mcp`
   return {
-    token, dataFolder: ARCHIVE_DIR, db: DB_PATH,
-    claudeCode: `claude mcp add --transport http chatgpt-archive ${MCP_URL}/mcp --header "Authorization: Bearer ${token}"`,
-    mcpConfig: JSON.stringify({ mcpServers: { 'chatgpt-archive': mcpEntry() } }, null, 2),
+    token, dataFolder: ARCHIVE_DIR, db: DB_PATH, server: remote?.url || '',
+    claudeCode: `claude mcp add --transport http chatgpt-archive ${mcpUrl} --header "Authorization: Bearer ${token}"`,
+    mcpConfig: JSON.stringify({ mcpServers: { 'chatgpt-archive': remote
+      ? { type: 'http', url: mcpUrl, headers: { Authorization: `Bearer ${token}` } }
+      : mcpEntry() } }, null, 2),
     version: app.getVersion()
   }
 })
 ipcMain.handle('open-data-folder', () => shell.openPath(ARCHIVE_DIR))
 ipcMain.handle('open-logs', () => shell.openPath(app.getPath('logs')))
-ipcMain.on('rebuild-index', rebuildIndex)
+ipcMain.on('rebuild-index', () => { if (!remote) rebuildIndex() })
 ipcMain.handle('web-link-state', () => webLinkPayload())
 ipcMain.handle('web-link-connect', () => {
+  if (remote) return webLinkPayload()
   writePrefs({ ...readPrefs(), webLink: true })
   if (tunnel.status === 'error') stopTunnel()
   startTunnel()
   return webLinkPayload()
 })
 ipcMain.handle('web-link-disconnect', () => {
+  if (remote) return webLinkPayload()
   writePrefs({ ...readPrefs(), webLink: false })
   stopTunnel()
   return webLinkPayload()
+})
+
+// ── Storage: moving to a server, switching back, freeing space ─────────────
+const MIGRATE_SCRIPT = join(KB_DIR, 'migrate.py')
+const MODELS_DIR = process.env.CHATGPT_ARCHIVE_MODELS || join(HOME, 'Library', 'Application Support', 'ChatGPTArchive', 'models')
+let migrateProc: ChildProcess | null = null
+
+function diskKB(path: string): Promise<number> {
+  return new Promise((resolve) => {
+    if (!existsSync(path)) return resolve(0)
+    execFile('/usr/bin/du', ['-sk', path], (err, out) => resolve(err ? 0 : parseInt(out, 10) || 0))
+  })
+}
+async function localUsage() {
+  const db = (await Promise.all(['', '-wal', '-shm'].map(x => diskKB(DB_PATH + x)))).reduce((a, b) => a + b, 0)
+  const [exports, models] = await Promise.all([diskKB(EXPORTS_DIR), diskKB(MODELS_DIR)])
+  return { hasLocalCopy: existsSync(DB_PATH), dataMB: Math.round((db + exports) / 102.4) / 10, modelMB: Math.round(models / 102.4) / 10 }
+}
+
+/** Checks address + access code before anything is sent. */
+async function testServer(input: string, token: string): Promise<{ ok: true; url: string; chats: number } | { ok: false; error: string }> {
+  const url = normalizeServerUrl(input || '')
+  if (!url) return { ok: false, error: 'Please type the server address, for example https://archive.example.com' }
+  if (url === API_URL) return { ok: false, error: "That is this Mac's own archive, not a server." }
+  if (!token.trim()) return { ok: false, error: 'Please paste the access code.' }
+  let h: Response
+  try { h = await fetch(`${url}/health`, { signal: AbortSignal.timeout(15000) }) } catch {
+    return { ok: false, error: `Can't reach ${url}. Check the address and the internet connection.` }
+  }
+  const hj: any = await h.json().catch(() => null)
+  if (!h.ok || hj?.status !== 'ok' || !('conversations' in hj)) return { ok: false, error: `There is no ChatGPT Archive server at ${url}.` }
+  const st = await fetch(`${url}/stats`, { headers: { Authorization: `Bearer ${token.trim()}` }, signal: AbortSignal.timeout(15000) }).catch(() => null)
+  if (!st) return { ok: false, error: `Can't reach ${url}. Check the internet connection.` }
+  if (st.status === 401 || st.status === 403) return { ok: false, error: 'The server did not accept the access code.' }
+  if (!st.ok) return { ok: false, error: `The server answered with an error (${st.status}).` }
+  const sj: any = await st.json().catch(() => ({}))
+  return { ok: true, url, chats: sj.conversations ?? 0 }
+}
+
+/** Runs kb/migrate.py: copies every local chat to the server and verifies them all. */
+function runMigrate(url: string, token: string, onProgress: (done: number, total: number) => void): Promise<{ ok: true; result: any } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    if (migrateProc) return resolve({ ok: false, error: 'A move is already running.' })
+    // The access code goes in the environment, not the command line (other programs can read that).
+    const proc = spawn(UV, ['run', '--quiet', '--script', MIGRATE_SCRIPT, '--to', url, '--db', DB_PATH],
+      { env: { ...CHILD_ENV, ARCHIVE_SERVER_TOKEN: token } })
+    migrateProc = proc
+    let result: any = null, error = '', buf = ''
+    const onData = (d: Buffer) => {
+      buf += d.toString()
+      let nl: number
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1)
+        log.info('[migrate]', line)
+        let m: RegExpMatchArray | null
+        if ((m = line.match(/^@progress (\d+) (\d+)$/))) onProgress(+m[1], +m[2])
+        else if (line.startsWith('@error ')) error = line.slice(7)
+        else if (line.startsWith('@done ')) { try { result = JSON.parse(line.slice(6)) } catch { /* ignore */ } }
+      }
+    }
+    proc.stdout?.on('data', onData)
+    proc.stderr?.on('data', onData)
+    proc.on('error', (e) => { migrateProc = null; resolve({ ok: false, error: `The move could not start (${e.message}).` }) })
+    proc.on('exit', () => {
+      migrateProc = null
+      resolve(result ? { ok: true, result } : { ok: false, error: error || 'The move did not finish. Nothing on this Mac was changed; please try again.' })
+    })
+  })
+}
+
+/** From now on use the server for everything; nothing runs locally any more. */
+function switchToServer(r: Remote) {
+  stopTunnel()
+  writePrefs({ ...readPrefs(), webLink: false })
+  stopServers()
+  writeRemote(r)
+  remote = r
+  if (existsSync(EXTENSION_DIR)) installExtensionFiles()
+  removeClaudeDesktopEntry()
+  startServers()
+  mainWindow?.webContents.send('web-link', webLinkPayload())
+  log.info('storage: now using the server', r.url)
+}
+
+ipcMain.handle('storage-info', async () => ({ mode: remote ? 'server' : 'local', server: remote?.url || '', ...(await localUsage()) }))
+ipcMain.handle('server-test', (_e, url: string, token: string) => testServer(url, token))
+ipcMain.handle('server-move', async (e, url: string, token: string) => {
+  if (remote) return { ok: false, error: 'Already using a server.' }
+  const t = await testServer(url, token)
+  if (!t.ok) return t
+  const send = (ev: object) => { if (!e.sender.isDestroyed()) e.sender.send('move-event', ev) }
+  runMigrate(t.url, token.trim(), (done, total) => send({ type: 'progress', done, total })).then((r) => {
+    if (!r.ok) return send({ type: 'error', error: r.error })
+    // Report first: switching briefly replaces the window with "Connecting…".
+    send({ type: 'done', result: r.result, extensionInstalled: existsSync(EXTENSION_DIR) })
+    setTimeout(() => switchToServer({ url: t.url, token: token.trim() }), 400)
+  })
+  return { ok: true }
+})
+// For a second Mac (or a reinstall): use a server that already has the chats, without moving anything.
+ipcMain.handle('server-connect', async (_e, url: string, token: string) => {
+  const t = await testServer(url, token)
+  if (!t.ok) return t
+  setTimeout(() => switchToServer({ url: t.url, token: token.trim() }), 400)
+  return { ok: true, chats: t.chats, extensionInstalled: existsSync(EXTENSION_DIR) }
+})
+ipcMain.handle('server-disconnect', async () => {
+  const usage = await localUsage()
+  setTimeout(() => {
+    writeRemote(null)
+    remote = null
+    if (existsSync(EXTENSION_DIR)) installExtensionFiles()
+    startServers()
+    mainWindow?.webContents.send('web-link', webLinkPayload())
+    log.info('storage: back to this Mac')
+  }, 400)
+  return { ok: true, extensionInstalled: existsSync(EXTENSION_DIR), ...usage }
+})
+ipcMain.handle('free-local-space', async (e) => {
+  if (!remote) return { ok: false, error: 'Your chats are only on this Mac, so they cannot be removed here.' }
+  const before = await localUsage()
+  if (!before.hasLocalCopy && before.modelMB === 0) return { ok: true, freedMB: 0 }
+  // Check again, right now, that the server has every chat (and send any it is missing).
+  if (before.hasLocalCopy) {
+    const send = (ev: object) => { if (!e.sender.isDestroyed()) e.sender.send('move-event', ev) }
+    const r = await runMigrate(remote.url, remote.token, (done, total) => send({ type: 'progress', done, total }))
+    if (!r.ok) return { ok: false, error: `Nothing was deleted: ${r.error}` }
+  }
+  // (The window asked the person to confirm before calling this.)
+  const total = Math.round((before.dataMB + before.modelMB) * 10) / 10
+  for (const f of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`, DB_PATH.replace(/\.db$/, '.db.tmp'), join(ARCHIVE_DIR, 'data', 'extension-last-seen')]) {
+    rmSync(f, { force: true })
+  }
+  rmSync(EXPORTS_DIR, { recursive: true, force: true })
+  rmSync(MODELS_DIR, { recursive: true, force: true })
+  log.info(`storage: removed the local copy (${total} MB)`)
+  return { ok: true, freedMB: total }
 })
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -703,11 +926,11 @@ if (!app.requestSingleInstanceLock()) {
     createTray()
     refreshExtensionIfOutdated()
     // The tunnel starts after leftovers from an earlier run were cleaned up.
-    startServers(true).then(() => { if (readPrefs().webLink) startTunnel() })
+    startServers(true).then(() => { if (!remote && readPrefs().webLink) startTunnel() })
     if (!process.argv.includes('--hidden')) showWindow()
     else app.dock?.hide()
   })
 
-  app.on('before-quit', () => { isQuitting = true; stopServers(); tunnelProc?.kill() })
+  app.on('before-quit', () => { isQuitting = true; stopServers(); tunnelProc?.kill(); migrateProc?.kill() })
   app.on('window-all-closed', () => { /* stay alive — menu bar app */ })
 }
