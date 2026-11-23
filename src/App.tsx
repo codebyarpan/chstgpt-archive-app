@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Home as HomeIcon, MessagesSquare, Search as SearchIcon, FolderOpen, Settings as SettingsIcon, Loader2, AlertTriangle, Archive } from 'lucide-react'
+import { Home as HomeIcon, MessagesSquare, Search as SearchIcon, FolderOpen, Settings as SettingsIcon, Loader2, AlertTriangle, Archive, Bot } from 'lucide-react'
 import Home from './pages/Home'
 import Chats from './pages/Chats'
 import Search from './pages/Search'
+import Ask from './pages/Ask'
 import Groups from './pages/Groups'
 import Settings from './pages/Settings'
 import ChatViewer from './ChatViewer'
@@ -12,6 +13,7 @@ const NAV: { id: Page; label: string; icon: any }[] = [
   { id: 'home', label: 'Home', icon: HomeIcon },
   { id: 'chats', label: 'All chats', icon: MessagesSquare },
   { id: 'search', label: 'Search', icon: SearchIcon },
+  { id: 'ask', label: 'Ask AI', icon: Bot },
   { id: 'groups', label: 'Groups', icon: FolderOpen },
   { id: 'settings', label: 'Settings & help', icon: SettingsIcon }
 ]
@@ -121,6 +123,7 @@ export default function App() {
             {page === 'home' && <Home />}
             {page === 'chats' && <Chats />}
             {page === 'search' && <Search />}
+            {page === 'ask' && <Ask />}
             {page === 'groups' && <Groups />}
             {page === 'settings' && <Settings />}
           </div>

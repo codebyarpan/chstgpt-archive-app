@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useState, ReactNode, ButtonHTML
 import { Loader2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 
 // ── Navigation + "open a chat" shared by every page ──────────────────────────
-export type Page = 'home' | 'chats' | 'search' | 'groups' | 'settings'
+export type Page = 'home' | 'chats' | 'search' | 'ask' | 'groups' | 'settings'
 interface AppCtx {
   go: (p: Page) => void
   openChat: (id: string, opts?: { at?: number; terms?: string }) => void
