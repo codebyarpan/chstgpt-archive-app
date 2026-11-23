@@ -43,6 +43,14 @@ ad hoc: on another Mac the first open needs System Settings → Privacy & Securi
   tunnel whose address changes on each start). Tabs give steps for ChatGPT, Claude on the web and
   other apps: `<tunnel>/t/<token>/mcp` for connectors without auth headers, or `<tunnel>/mcp` plus
   `Authorization: Bearer <token>`. Reopened at launch while turned on.
+- "Storage → Move to a server" (for saving space, or one archive for several computers): checks the
+  server (`deploy/` in the backend folder), runs `kb/migrate.py` (uploads through `POST /import`,
+  then verifies every chat id), and switches to server mode. In server mode nothing runs locally:
+  the window, Ask AI and the connect links use `https://<server>` with its `ARCHIVE_TOKEN` (kept in
+  `<userData>/server.json`, mode 0600), the extension is re-paired with the server added to its
+  manifest's host_permissions (one reload in Chrome), and the local Claude Desktop entry is removed.
+  "Free up space" re-verifies, then deletes the local database, exports and search model.
+  "Just connect" is for a second Mac; "Use this Mac instead" switches back.
 - "Ask AI" answers questions from the archive: hybrid search picks passages, Groq or xAI Grok writes
   the answer with [n] citations. Key in `<userData>/ai.json` (mode 0600), never sent to the window.
 
@@ -56,5 +64,6 @@ npm run typecheck
 Environment overrides (used by the automated tests): `CHATGPT_ARCHIVE_HOME` (data folder),
 `CHATGPT_ARCHIVE_API_PORT` / `CHATGPT_ARCHIVE_MCP_PORT`, `CHATGPT_ARCHIVE_PROFILE` (separate
 Electron profile, so a second copy can run), `CHATGPT_ARCHIVE_OFFSCREEN=1` (render without a window),
-`CHATGPT_ARCHIVE_AI_BASE` (send Ask AI requests to another OpenAI-compatible server, e.g. a fake one).
+`CHATGPT_ARCHIVE_AI_BASE` (send Ask AI requests to another OpenAI-compatible server, e.g. a fake one),
+`CHATGPT_ARCHIVE_MODELS` (search-model folder), `CHATGPT_ARCHIVE_EXTENSION_DIR` (where the extension is copied).
 In VS Code's terminal, unset `ELECTRON_RUN_AS_NODE` before starting Electron.

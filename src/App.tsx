@@ -34,9 +34,15 @@ function StartupScreen({ status }: { status: AppStatus | null }) {
             <p className="text-sm text-slate-300 leading-relaxed mb-6">{status?.error}</p>
             <div className="flex justify-center gap-3">
               <Button onClick={() => window.api?.retryStart()}>Try again</Button>
-              <Button variant="secondary" onClick={() => window.api?.openLogs()}>Show details</Button>
+              {status?.server
+                ? <Button variant="secondary" onClick={() => window.api?.serverDisconnect()}>Use this Mac instead</Button>
+                : <Button variant="secondary" onClick={() => window.api?.openLogs()}>Show details</Button>}
             </div>
-            <p className="text-xs text-slate-500 mt-6">If it keeps happening, send the files from "Show details" to the person who gave you this app.</p>
+            <p className="text-xs text-slate-500 mt-6">
+              {status?.server
+                ? 'If it keeps happening, ask whoever runs your server to check it. "Use this Mac instead" opens the copy on this Mac (your chats on the server stay there).'
+                : 'If it keeps happening, send the files from "Show details" to the person who gave you this app.'}
+            </p>
           </>
         ) : (
           <>
@@ -113,7 +119,7 @@ export default function App() {
             ))}
           </nav>
           <div className="px-5 py-4 text-xs text-slate-500 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Running
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> {status.server ? 'On your server' : 'Running'}
           </div>
         </aside>
 

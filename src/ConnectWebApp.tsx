@@ -96,7 +96,9 @@ export default function ConnectWebApp() {
 
   return (
     <div>
-      <p className="text-sm text-emerald-300 flex items-center gap-2 mb-4"><Check size={16} /> The secure link is open. Pick the app you want to connect:</p>
+      <p className="text-sm text-emerald-300 flex items-center gap-2 mb-4">
+        <Check size={16} /> {s.server ? 'Your archive is on your server, so this link always works. Pick the app you want to connect:' : 'The secure link is open. Pick the app you want to connect:'}
+      </p>
 
       <div role="tablist" className="inline-flex p-1 mb-5 rounded-xl bg-slate-950 border border-slate-800">
         {TABS.map(t => (
@@ -165,9 +167,10 @@ export default function ConnectWebApp() {
       )}
       <p className="text-xs text-slate-500 mb-4 flex items-start gap-2">
         <ShieldAlert size={14} className="shrink-0 mt-0.5" />
-        Anyone who has this link can read your saved chats. Only paste it into apps you trust, and don't share it. To close it, click Turn off.
+        Anyone who has this link can read your saved chats. Only paste it into apps you trust, and don't share it.
+        {s.server ? " To change it, change the server's ARCHIVE_TOKEN (then reconnect this app in Storage)." : ' To close it, click Turn off.'}
       </p>
-      <Button variant="secondary" onClick={() => window.api!.webLinkDisconnect().then(setS)}>Turn off</Button>
+      {!s.server && <Button variant="secondary" onClick={() => window.api!.webLinkDisconnect().then(setS)}>Turn off</Button>}
     </div>
   )
 }
