@@ -1,10 +1,11 @@
 import { useState, useEffect, ReactNode, useRef } from 'react'
-import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Globe, Sparkles } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronRight, Chrome, Power, Bot, Wrench, HelpCircle, Globe, Sparkles, Database } from 'lucide-react'
 import { api, Stats } from '../api'
 import { Button, Card, PageTitle, useApp } from '../ui'
 import ConnectChrome from '../ConnectChrome'
 import ConnectWebApp from '../ConnectWebApp'
 import AiSettings from '../AiSettings'
+import StorageSettings from '../StorageSettings'
 
 function Section({ icon: Icon, title, children }: { icon: any; title: string; children: ReactNode }) {
   return (
@@ -49,7 +50,7 @@ export default function Settings() {
   const { toast, changed } = useApp()
   const [stats, setStats] = useState<Stats | null>(null)
   const [login, setLogin] = useState<{ enabled: boolean; available: boolean } | null>(null)
-  const [claude, setClaude] = useState<'not-installed' | 'connected' | 'not-connected' | null>(null)
+  const [claude, setClaude] = useState<'not-installed' | 'connected' | 'not-connected' | 'server' | null>(null)
   const [adv, setAdv] = useState<AdvancedInfo | null>(null)
   const [showAdv, setShowAdv] = useState(false)
   const [rebuildLog, setRebuildLog] = useState('')
@@ -93,6 +94,12 @@ export default function Settings() {
     <div>
       <PageTitle title="Settings & help" />
 
+      <div id="storage" className="scroll-mt-10">
+        <Section icon={Database} title="Storage: where your chats are kept">
+          <StorageSettings />
+        </Section>
+      </div>
+
       <Section icon={Chrome} title="Chrome extension">
         <ConnectChrome connected={!!stats?.extension_last_seen} />
         {stats?.extension_last_seen && (
@@ -119,8 +126,9 @@ export default function Settings() {
           <span>
             <span className="text-sm text-slate-100">Start ChatGPT Archive automatically when I log in</span>
             <span className="block text-sm text-slate-400 mt-0.5">
-              Chrome can only save chats while this app is running. It runs quietly in the menu bar (top-right of your screen);
-              closing this window does not stop it.
+              {adv?.server
+                ? 'Your chats are on your server, so Chrome saves them even when this app is closed. Keep this on only if you like having the app in the menu bar.'
+                : 'Chrome can only save chats while this app is running. It runs quietly in the menu bar (top-right of your screen); closing this window does not stop it.'}
             </span>
           </span>
         </label>
@@ -131,7 +139,13 @@ export default function Settings() {
           Lets the Claude app search and read your saved ChatGPT chats when you ask it about them,
           e.g. “what did I discuss with ChatGPT about my resume?”.
         </p>
-        {claude === 'connected' ? (
+        {claude === 'server' ? (
+          <p className="text-sm text-slate-400">
+            Your archive is on your server, so Claude connects to it directly. In the Claude app or on claude.ai, open{' '}
+            <b className="text-slate-200">Settings → Connectors → Add custom connector</b> and paste the link from{' '}
+            <b className="text-slate-200">Connect a web app</b> below (the “Claude on the web” tab).
+          </p>
+        ) : claude === 'connected' ? (
           <p className="text-sm text-emerald-300 flex items-center gap-2"><Check size={16} /> Claude is connected. If you just connected it, quit and reopen Claude.</p>
         ) : claude === 'not-installed' ? (
           <p className="text-sm text-slate-400">
@@ -149,7 +163,9 @@ export default function Settings() {
 
       <Section icon={HelpCircle} title="Questions">
         <Faq q="Where are my chats stored? Are they uploaded anywhere?">
-          Everything stays on this Mac. The app does not upload your chats anywhere. Smart search also runs on this Mac.
+          {adv?.server
+            ? `On your own server (${adv.server}), and nowhere else. See Storage at the top of this page.`
+            : 'Everything stays on this Mac. The app does not upload your chats anywhere. Smart search also runs on this Mac. To save space you can move them to your own server (Storage, at the top of this page).'}
         </Faq>
         <Faq q="I don't see the green archive button on chatgpt.com">
           Make sure the extension is added (steps above), then reload the chatgpt.com page. The button is a small green circle in the bottom-right corner.
@@ -176,12 +192,14 @@ export default function Settings() {
         {showAdv && adv && (
           <div className="px-6 pb-6">
             <div className="flex flex-wrap gap-2 mb-5">
-              <Button variant="secondary" onClick={() => window.api!.openDataFolder()}>Open data folder</Button>
+              {!adv.server && <Button variant="secondary" onClick={() => window.api!.openDataFolder()}>Open data folder</Button>}
               <Button variant="secondary" onClick={() => window.api!.openLogs()}>Show log files</Button>
-              <Button variant="secondary" busy={rebuilding} onClick={() => { setRebuilding(true); setRebuildLog(''); window.api!.rebuildIndex() }}
-                title="Re-reads the saved copy of every chat and rebuilds the search database. Groups are kept.">
-                Repair database
-              </Button>
+              {!adv.server && (
+                <Button variant="secondary" busy={rebuilding} onClick={() => { setRebuilding(true); setRebuildLog(''); window.api!.rebuildIndex() }}
+                  title="Re-reads the saved copy of every chat and rebuilds the search database. Groups are kept.">
+                  Repair database
+                </Button>
+              )}
             </div>
             {rebuildLog && (
               <pre ref={logRef} className="mb-5 text-xs text-emerald-300 font-mono bg-slate-950 border border-slate-800 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap select-text">{rebuildLog}</pre>
@@ -192,10 +210,12 @@ export default function Settings() {
                 {stats.embedding.last_error ? ` · last smart-search error: ${stats.embedding.last_error}` : ''}
               </p>
             )}
-            <CopyBox label="Access token (the Chrome extension fills this in by itself)" text={adv.token} />
-            <CopyBox label="Claude Code — add as an MCP server over HTTP (needs this app running)" text={adv.claudeCode} />
-            <CopyBox label="MCP config for other clients (stdio)" text={adv.mcpConfig} />
-            <p className="text-xs text-slate-500">Data folder: <span className="font-mono select-text">{adv.dataFolder}</span> · App version {adv.version}</p>
+            <CopyBox label={adv.server ? "Access token (your server's ARCHIVE_TOKEN)" : 'Access token (the Chrome extension fills this in by itself)'} text={adv.token} />
+            <CopyBox label={adv.server ? 'Claude Code: add your server as an MCP server' : 'Claude Code: add as an MCP server over HTTP (needs this app running)'} text={adv.claudeCode} />
+            <CopyBox label={adv.server ? 'MCP config for other clients (HTTP)' : 'MCP config for other clients (stdio)'} text={adv.mcpConfig} />
+            <p className="text-xs text-slate-500">
+              {adv.server ? <>Server: <span className="font-mono select-text">{adv.server}</span></> : <>Data folder: <span className="font-mono select-text">{adv.dataFolder}</span></>} · App version {adv.version}
+            </p>
           </div>
         )}
       </Card>
