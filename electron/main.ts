@@ -63,7 +63,7 @@ const CHILD_ENV = {
 
 // ── Small persisted preferences ─────────────────────────────────────────────
 const PREFS_FILE = join(app.getPath('userData'), 'prefs.json')
-interface Prefs { initialized?: boolean; closeNoticeShown?: boolean }
+interface Prefs { initialized?: boolean; closeNoticeShown?: boolean; chatgptTunnel?: boolean }
 function readPrefs(): Prefs {
   try { return JSON.parse(readFileSync(PREFS_FILE, 'utf8')) } catch { return {} }
 }
@@ -163,14 +163,17 @@ function setError(msg: string) {
 }
 
 /** Stop leftovers from an earlier run (e.g. after a crash) so this copy owns the ports. */
-function killStrays(): Promise<void> {
+function killStrays(includeTunnel = false): Promise<void> {
+  const patterns = [`ingest_api.py --port ${API_PORT}`, `server.py --http --port ${MCP_PORT}`]
+  // Only at app start: later (e.g. "Try again") the running tunnel is our own.
+  if (includeTunnel) patterns.push(`cloudflared tunnel --no-autoupdate --url ${MCP_URL}`, `ngrok http .*127.0.0.1:${MCP_PORT}`)
   return new Promise((resolve) => {
-    execFile('/usr/bin/pkill', ['-f', `ingest_api.py --port ${API_PORT}|server.py --http --port ${MCP_PORT}`], () => setTimeout(resolve, 500))
+    execFile('/usr/bin/pkill', ['-f', patterns.join('|')], () => setTimeout(resolve, 500))
   })
 }
 
 let pollTimer: NodeJS.Timeout | null = null
-async function startServers() {
+async function startServers(appStart = false) {
   phase = 'starting'
   phaseDetail = 'Starting…'
   errorMessage = ''
@@ -185,7 +188,7 @@ async function startServers() {
     return
   }
   try { ensureToken() } catch (e: any) { setError(`Could not create the data folder: ${e.message}`); return }
-  await killStrays()
+  await killStrays(appStart)
   for (const s of servers) { s.restarts = 0; s.failed = false; startServer(s) }
   if (pollTimer) clearTimeout(pollTimer)
   pollHealth()
@@ -462,6 +465,99 @@ function connectClaudeDesktop(): { ok: boolean; error?: string } {
   }
 }
 
+// ── ChatGPT (a public HTTPS tunnel to the local MCP server) ─────────────────
+// ChatGPT connectors only reach public https addresses and cannot send an
+// Authorization header, so the token travels in the path: <tunnel>/t/<token>/mcp.
+// With ngrok set up (start-jarvis.sh --setup) the address never changes;
+// otherwise a Cloudflare quick tunnel (no account) gets a new one on each start.
+interface TunnelState { status: 'off' | 'starting' | 'on' | 'error'; url: string; stable: boolean; error: string }
+let tunnel: TunnelState = { status: 'off', url: '', stable: false, error: '' }
+let tunnelProc: ChildProcess | null = null
+const NGROK_DOMAIN_FILE = join(ARCHIVE_DIR, '.ngrok-domain')
+
+function findBinary(name: string): string | null {
+  if (app.isPackaged) {
+    const bundled = join(process.resourcesPath, 'bin', name)
+    if (existsSync(bundled)) return bundled
+  }
+  for (const dir of EXTRA_PATHS) {
+    const p = join(dir, name)
+    if (existsSync(p)) return p
+  }
+  return null
+}
+
+function setTunnel(t: Partial<TunnelState>) {
+  tunnel = { ...tunnel, ...t }
+  mainWindow?.webContents.send('chatgpt', chatgptPayload())
+}
+function chatgptPayload() {
+  const token = readToken()
+  return { ...tunnel, connectorUrl: tunnel.status === 'on' && token ? `${tunnel.url}/t/${token}/mcp` : '' }
+}
+
+function startTunnel() {
+  if (tunnelProc) return
+  const domain = existsSync(NGROK_DOMAIN_FILE) ? readFileSync(NGROK_DOMAIN_FILE, 'utf8').trim() : ''
+  const ngrok = domain ? findBinary('ngrok') : null
+  const cloudflared = findBinary('cloudflared')
+  let cmd: string, args: string[], ready: (line: string) => string | null
+  if (ngrok) {
+    const url = `https://${domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`
+    cmd = ngrok
+    args = ['http', `--url=${url}`, `127.0.0.1:${MCP_PORT}`, '--log', 'stdout', '--log-format', 'logfmt']
+    ready = (line) => (line.includes('msg="started tunnel"') ? url : null)
+  } else if (cloudflared) {
+    cmd = cloudflared
+    args = ['tunnel', '--no-autoupdate', '--url', MCP_URL]
+    let found = ''
+    ready = (line) => {
+      const m = line.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/)
+      if (m && !m[0].startsWith('https://api.')) found = m[0]
+      return found && /Registered tunnel connection/.test(line) ? found : null
+    }
+  } else {
+    setTunnel({ status: 'error', error: "The secure-link helper is missing from this copy of the app. Please reinstall it." })
+    return
+  }
+  setTunnel({ status: 'starting', error: '', url: '', stable: !!ngrok })
+  log.info(`[tunnel] starting: ${cmd} ${args.join(' ')}`)
+  const proc = spawn(cmd, args, { env: CHILD_ENV, stdio: ['ignore', 'pipe', 'pipe'] })
+  tunnelProc = proc
+  let lastLine = ''
+  const giveUp = setTimeout(() => {
+    if (tunnelProc === proc && tunnel.status === 'starting') {
+      proc.kill()
+      setTunnel({ status: 'error', error: 'The secure link could not be opened. Please check the internet connection, then try again.' })
+    }
+  }, 60000)
+  const onData = (d: Buffer) => {
+    for (const line of d.toString().split(/\r?\n/).filter(Boolean)) {
+      lastLine = line
+      const url = tunnel.status === 'starting' ? ready(line) : null
+      if (url) { clearTimeout(giveUp); log.info('[tunnel] ready', url); setTunnel({ status: 'on', url }) }
+    }
+  }
+  proc.stdout?.on('data', onData)
+  proc.stderr?.on('data', onData)
+  proc.on('error', (err) => { clearTimeout(giveUp); setTunnel({ status: 'error', error: `The secure link could not be started (${err.message}).` }) })
+  proc.on('exit', (code) => {
+    clearTimeout(giveUp)
+    if (tunnelProc !== proc) return
+    tunnelProc = null
+    log.warn('[tunnel] exited', code, lastLine)
+    if (isQuitting || tunnel.status === 'off') return
+    setTunnel({ status: 'error', url: '', error: 'The secure link to ChatGPT stopped (for example after the internet dropped). Click "Try again".' })
+  })
+}
+
+function stopTunnel() {
+  const proc = tunnelProc
+  tunnelProc = null
+  setTunnel({ status: 'off', url: '', error: '' })
+  proc?.kill()
+}
+
 // ── IPC ───────────────────────────────────────────────────────────────────────
 /**
  * The renderer talks to the Ingest API through here: the main process adds the
@@ -525,6 +621,18 @@ ipcMain.handle('get-advanced', () => {
 ipcMain.handle('open-data-folder', () => shell.openPath(ARCHIVE_DIR))
 ipcMain.handle('open-logs', () => shell.openPath(app.getPath('logs')))
 ipcMain.on('rebuild-index', rebuildIndex)
+ipcMain.handle('chatgpt-state', () => chatgptPayload())
+ipcMain.handle('chatgpt-connect', () => {
+  writePrefs({ ...readPrefs(), chatgptTunnel: true })
+  if (tunnel.status === 'error') stopTunnel()
+  startTunnel()
+  return chatgptPayload()
+})
+ipcMain.handle('chatgpt-disconnect', () => {
+  writePrefs({ ...readPrefs(), chatgptTunnel: false })
+  stopTunnel()
+  return chatgptPayload()
+})
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 // One copy only: a second copy would fight over ports 47821/47822.
@@ -557,11 +665,12 @@ if (!app.requestSingleInstanceLock()) {
     }
     createTray()
     refreshExtensionIfOutdated()
-    startServers()
+    // The tunnel starts after leftovers from an earlier run were cleaned up.
+    startServers(true).then(() => { if (readPrefs().chatgptTunnel) startTunnel() })
     if (!process.argv.includes('--hidden')) showWindow()
     else app.dock?.hide()
   })
 
-  app.on('before-quit', () => { isQuitting = true; stopServers() })
+  app.on('before-quit', () => { isQuitting = true; stopServers(); tunnelProc?.kill() })
   app.on('window-all-closed', () => { /* stay alive — menu bar app */ })
 }

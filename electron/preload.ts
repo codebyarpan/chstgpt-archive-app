@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
   openLogs: () => ipcRenderer.invoke('open-logs'),
   rebuildIndex: () => ipcRenderer.send('rebuild-index'),
+  chatgptState: () => ipcRenderer.invoke('chatgpt-state'),
+  chatgptConnect: () => ipcRenderer.invoke('chatgpt-connect'),
+  chatgptDisconnect: () => ipcRenderer.invoke('chatgpt-disconnect'),
+  onChatgpt: (cb: (s: unknown) => void) => subscribe('chatgpt', cb),
   onRebuildProgress: (cb: (line: string) => void) => subscribe('rebuild-progress', cb),
   onRebuildDone: (cb: (code: number | null) => void) => subscribe('rebuild-done', cb)
 })
